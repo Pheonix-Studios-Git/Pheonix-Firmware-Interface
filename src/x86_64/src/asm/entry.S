@@ -14,7 +14,9 @@ early_init:
     movw %ax, %ss
     movw $0x7C00, %sp
 
-    call enable_a20
+    inb $0x92, %al
+    orb $2, %al
+    outb %al, $0x92
     
     // Load 32-bit GDT
     pushl $0x100000 // Base address of .data
@@ -31,7 +33,7 @@ early_init:
     // SEE THIS IS WHAT I HAVE TO DO BECAUSE OF ASSEMBLERS AND LINKERS WHEN WORKING IN THIS ENVIRONMENT
     // YEAH THIS IS RAW MACHINE CODE FOR x86_64 IN THE ASSEMBLY FILE ITSELF
     
-    // .byte 0x66
+    .byte 0x66
     .byte 0xEA // jmp 0x08:<addr>
     .long 0xFF000000 + (init_pm - early_init)
     .word 0x08
@@ -128,12 +130,6 @@ setup_paging_structures:
     addl $0x200000, %ebx
     decl %ecx
     jnz .fill_pd1
-    ret
-
-enable_a20:
-    inb $0x92, %al
-    orb $2, %al
-    outb %al, $0x92
     ret
 
 .code64
