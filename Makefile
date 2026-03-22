@@ -100,16 +100,21 @@ $(BUILD_DIR)/%.S.o: $(SRC_DIR)/%.S
 	$(call success,"Assembled S [Assembly]: $@")
 
 $(TARGET_ELF): $(OBJS) $(OBJS_ASM)
-	$(call log,"Linking $(OBJS) $(OBJS_ASM)")
-	@$(LD) $(LDFLAGS) -o $(TARGET_ELF) $(OBJS) $(OBJS_ASM)
+	$(call log,"Linking $(OBJS_ASM) $(OBJS)")
+	@$(LD) $(LDFLAGS) -o $(TARGET_ELF) $(OBJS_ASM) $(OBJS)
 	$(call success,"Linked $(TARGET_ELF)")
 
 $(TARGET): $(TARGET_ELF)
 	$(call log,"Creating Flash image $(TARGET)")
-	@$(OBJCOPY) -O binary --only-section=.text --only-section=.reset --gap-fill 0xFF --pad-to 0x1000000 $(TARGET_ELF) $(TARGET)
+	@$(OBJCOPY) -O binary \
+		--strip-all \
+		-j .text -j .reset \
+		--gap-fill 0xFF \
+		--pad-to 0x1000000 \
+		$(TARGET_ELF) $(TARGET)
 	@SIZE=$$(stat -c%s $(TARGET)); \
 	if [ "$$SIZE" -ne 16777216 ]; then \
-		$(call error,"File size is $$SIZE, expected 16777216"); \
+		printf "$(COLOR_RED)[Error]$(COLOR_RESET) File size is %s, expected 16777216\n" "$$SIZE" >&2; \
 		exit 1; \
 	fi
 	$(call success,"Flash image $(TARGET) created and aligned.")

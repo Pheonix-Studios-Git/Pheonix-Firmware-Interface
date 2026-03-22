@@ -65,7 +65,7 @@ $QEMU \
     $KVM \
     -cpu $CPU \
     -m $MEM \
-    -drive if=pflash,format=raw,file=$FIRMWARE \
+    -bios $FIRMWARE \
     -vga std \
-    -d int,guest_errors,cpu_reset \
+    -d in_asm,int,guest_errors,cpu_reset \
     -no-reboot

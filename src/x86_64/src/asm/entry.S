@@ -5,11 +5,9 @@
 
 .extern pfi_main
 
-.section .reset, "ax"
+.section .text.entry, "ax"
     .code16
-    .global _start
-
-_start:
+early_init:
     cli
     xorw %ax, %ax
     movw %ax, %ds
@@ -33,8 +31,9 @@ _start:
     // SEE THIS IS WHAT I HAVE TO DO BECAUSE OF ASSEMBLERS AND LINKERS WHEN WORKING IN THIS ENVIRONMENT
     // YEAH THIS IS RAW MACHINE CODE FOR x86_64 IN THE ASSEMBLY FILE ITSELF
     
-    .byte 0x66, 0xEA // jmp 0x08:<addr>
-    .long 0xFFFFFF00 + (init_pm - _start)
+    // .byte 0x66
+    .byte 0xEA // jmp 0x08:<addr>
+    .long 0xFF000000 + (init_pm - early_init)
     .word 0x08
 
 .code32
@@ -71,10 +70,14 @@ init_pm:
     // Load 64-bit GDT and Jump
     lgdt (gdt64_descriptor)
 
-    movl $0xFF000000, %eax // Base of .text
+    movl $0xFF000000, %eax
     pushl $0x08 // CS
     pushl %eax // EIP/RIP
     lretl
+
+    .byte 0xEA
+    .long init_pm64
+    .byte 0x08 // jmp 0x08:init_pm64
 
 clear_page_tables:
     // Zero out PML4, PDPT, and PD0
@@ -140,6 +143,18 @@ init_pm64:
     movq %rsp, %rbp
     movabs $pfi_main, %rax
     jmp *%rax
+
+.section .reset, "ax"
+    .code16
+    .global _start
+_start:
+    .byte 0x66
+    .byte 0xEA
+    .long early_init
+    .word 0x00
+
+    .p2align
+    .org 16
 
 .section .data
     .align 16
