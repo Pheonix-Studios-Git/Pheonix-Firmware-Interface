@@ -5,6 +5,8 @@ ARCH ?= x86_64
 BUILD_DIR = build/$(ARCH)
 BIN_DIR = bin/$(ARCH)
 SRC_DIR = src/$(ARCH)/src
+INC_DIR = src/$(ARCH)/inc
+COMMON_INC_DIR = src/common/inc
 
 SCRIPTS_DIR = scripts
 
@@ -34,13 +36,19 @@ CC = $(CROSS)gcc
 LD = $(CROSS)ld
 OBJCOPY = $(CROSS)objcopy
 
-CFLAGS += -ffreestanding -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-pic -fno-pie -Wall -Wextra -c
+CFLAGS += -ffreestanding \
+		  -fno-exceptions -fno-unwind-tables \
+		  -fno-asynchronous-unwind-tables \
+		  -fno-stack-protector -fno-pic -fno-pie \
+		  -Wall -Wextra -c \
+		  -I $(COMMON_INC_DIR) -I $(INC_DIR)
 LDFLAGS = -nostdlib -T $(SCRIPTS_DIR)/linker.$(ARCH).ld \
           --no-relax \
           --no-check-sections \
           -static \
           -z max-page-size=0x1000 \
-          --nmagic
+          --nmagic \
+		  -N
 
 # Sources
 SRCS := $(shell find $(SRC_DIR) -name "*.c")

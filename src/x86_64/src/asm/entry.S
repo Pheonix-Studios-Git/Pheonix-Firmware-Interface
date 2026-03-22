@@ -19,10 +19,10 @@ early_init:
     outb %al, $0x92
     
     // Load 32-bit GDT
-    pushl $0x100000 // Base address of .data
+    pushl $gdt_start // The descriptor
     pushw $0x17 // Limit (3 entries * 8 - 1)
     movl %esp, %ebx
-    addr32 data32 lgdt (%ebx) // Wierd fix to make this work due to linker HATING IT
+    data32 lgdt (%ebx) // Wierd fix to make this work due to linker HATING IT
     addl $6, %esp // Clean up stack
     
     // Transition to Protected Mode
@@ -72,14 +72,9 @@ init_pm:
     // Load 64-bit GDT and Jump
     lgdt (gdt64_descriptor)
 
-    movl $0xFF000000, %eax
-    pushl $0x08 // CS
-    pushl %eax // EIP/RIP
-    lretl
-
     .byte 0xEA
     .long init_pm64
-    .byte 0x08 // jmp 0x08:init_pm64
+    .word 0x08 // jmp 0x08:init_pm64
 
 clear_page_tables:
     // Zero out PML4, PDPT, and PD0
@@ -152,7 +147,7 @@ _start:
     .p2align
     .org 16
 
-.section .data
+.section .rodata
     .align 16
 gdt_start:
     .quad 0x0000000000000000

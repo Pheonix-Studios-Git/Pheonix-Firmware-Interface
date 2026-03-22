@@ -1,7 +1,12 @@
 #include <stdint.h>
 
-__attribute__((used, noinline, section(".text.start"), noreturn)) void pfi_main(void) {
-    volatile uint16_t *video = (uint16_t*)0xB8000;
-    *video = (uint16_t)('A' | (0x07 << 8));
+#include <serial.h>
+#include <core.h>
+
+__attribute__((used, noinline, section(".text.c"), noreturn)) void pfi_main(void) {
+    serial_init();
+
+    serial_print("PFI Bootup successful!\n");
+
     for (;;) asm("hlt");
 }

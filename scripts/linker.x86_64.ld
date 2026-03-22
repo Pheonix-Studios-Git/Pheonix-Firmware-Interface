@@ -4,19 +4,23 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* Page Tables & Low Data (RAM) */
-    .data 0x100000 : { 
+    .data 0x100000 : AT(SIZEOF(.text)) {
+        _data_start = .;
         *(.data*)
-        *(.pagetables)
+        _data_end = .;
     }
+
+    /* Page Tables & BSS (RAM) */
+    .pagetables : AT(SIZEOF(.data) + ADDR(.data)) { *(.pagetables) }
     .bss : { *(.bss*) *(COMMON) }
 
     /* The PFI Runtime (Virtual High Half) */
     .text 0xFF000000 : AT(0) {
         *(.text.entry)
-        *(.text.start)
         *(.text*)
+        *(.text.c)
         *(.rodata*)
+        _etext = .;
     }
 
     /* The Reset Vector (The absolute end of 32-bit space) */
