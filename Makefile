@@ -41,6 +41,7 @@ CFLAGS += -ffreestanding \
 		  -fno-asynchronous-unwind-tables \
 		  -fno-stack-protector -fno-pic -fno-pie \
 		  -Wall -Wextra -c \
+		  -MMD -MP \
 		  -I $(COMMON_INC_DIR) -I $(INC_DIR)
 LDFLAGS = -nostdlib -T $(SCRIPTS_DIR)/linker.$(ARCH).ld \
           --no-relax \
@@ -56,6 +57,9 @@ OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 
 SRCS_ASM := $(shell find $(SRC_DIR) -name "*.S")
 OBJS_ASM := $(patsubst $(SRC_DIR)/%.S,$(BUILD_DIR)/%.S.o,$(SRCS_ASM))
+
+DEPS := $(OBJS:.o=.d)
+-include $(DEPS)
 
 # Colors
 COLOR_RESET := \033[0m
@@ -87,12 +91,12 @@ all: $(BIN_DIR) $(BUILD_DIR) $(TARGET)
 
 $(BUILD_DIR):
 	$(call log,"Creating build directory")
-	@mkdir $(BUILD_DIR)
+	@mkdir -p $(BUILD_DIR)
 	$(call success,"Created build directory")
 
 $(BIN_DIR):
 	$(call log,"Creating bin directory")
-	@mkdir $(BIN_DIR)
+	@mkdir -p $(BIN_DIR)
 	$(call success,"Created bin directory")
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
@@ -135,7 +139,7 @@ clean:
 # Convenience is good boys
 run:
 	$(call log,"Running - $(ARCH)")
-	@./run.sh $(ARCH)
+	@./run.sh -arch=$(ARCH)
 	$(call success,"Finished")
 
 .PHONY: all clean run

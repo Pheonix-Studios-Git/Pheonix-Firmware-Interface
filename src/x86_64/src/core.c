@@ -1,4 +1,94 @@
+#include <stdint.h>
 #include <core.h>
+
+void outb(uint16_t port, uint8_t value) {
+    __asm__ volatile (
+        "outb %0, %1"
+        : :
+        "a"(value), "Nd"(port)
+    );
+}
+
+void outw(uint16_t port, uint16_t value) {
+    __asm__ volatile (
+        "outw %0, %1"
+        : : 
+        "a"(value), "Nd"(port)
+    );
+}
+
+void outl(uint16_t port, uint32_t value) {
+    __asm__ volatile (
+        "outl %0, %1"
+        : :
+        "a"(value), "Nd"(port)
+    );
+}
+
+void outsw(uint16_t port, const void *buffer, uint32_t count) {
+    const uint16_t *buf = (const uint16_t *)buffer;
+
+    __asm__ volatile (
+        "rep outsw"
+        :
+        "+S"(buf), "+c"(count)
+        :
+        "d"(port)
+        :
+        "memory"
+    );
+}
+
+uint8_t inb(uint16_t port) {
+    uint8_t value;
+    __asm__ volatile (
+        "inb %1, %0"
+        :
+        "=a"(value)
+        :
+        "Nd"(port)
+    );
+    return value;
+}
+
+uint16_t inw(uint16_t port) {
+    uint16_t value;
+    __asm__ volatile (
+        "inw %1, %0"
+        :
+        "=a"(value)
+        :
+        "Nd"(port)
+    );
+    return value;
+}
+
+uint32_t inl(uint16_t port) {
+    uint32_t value;
+    __asm__ volatile (
+        "inl %1, %0"
+        :
+        "=a"(value)
+        :
+        "Nd"(port)
+    );
+    return value;
+}
+
+void insw(uint16_t port, void *buffer, uint32_t count) {
+    uint16_t *buf = (uint16_t *)buffer;
+
+    __asm__ volatile (
+        "rep insw"
+        :
+        "+D"(buf), "+c"(count)
+        :
+        "d"(port)
+        :
+        "memory"
+    );
+}
+
 
 void spin_lock(spinlock_t* lock) {
     while (__sync_lock_test_and_set(lock, 1)) {
@@ -65,3 +155,4 @@ unsigned int str_to_uint(const char* str) {
 
     return result;
 }
+

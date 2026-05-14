@@ -1,4 +1,4 @@
-/* Phoenix Firmware Interface - x86_64 Entry */
+/* Pheonix Firmware Interface - x86_64 Entry */
 .equ PAGE_PRESENT, (1 << 0)
 .equ PAGE_RW, (1 << 1)
 .equ PAGE_PS, (1 << 7) // Huge page (2MB in PD)
