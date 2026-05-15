@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include <builtins.h>
 #include <core.h>
 
 #include <serial.h>
@@ -23,27 +24,29 @@ static int header_index = 0;
 
 static uint64_t avmf_limit[128];
 static uint64_t avmf_base[128];
-static uint64_t avmf_bitmap[BITMAP_SIZE];
+static uint64_t avmf_bitmap[BITMAP_SIZE / 64];
 
 static uint64_t heap_kernel = AOS_KERNEL_SPACE_BASE;
 static uint64_t heap_driver = AOS_DRIVER_SPACE_BASE;
 static uint64_t heap_user = AOS_USER_SPACE_BASE;
 static uint64_t heap_sensitive = AOS_SENSITIVE_SPACE_BASE;
 
-static inline uint64_t align4k(uint64_t value) {
+static uint64_t last_alloc_page = 0;
+
+static uint64_t align4k(uint64_t value) {
     return (value + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 }
 
 static void bitmap_set(uint64_t page_idx) {
-    avmf_bitmap[page_idx / 8] |= (1 << (page_idx % 8));
+    avmf_bitmap[page_idx >> 6] |= (1ULL << (page_idx & 63));
 }
 
 static void bitmap_clear(uint64_t page_idx) {
-    avmf_bitmap[page_idx / 8] &= ~(1 << (page_idx % 8));
+    avmf_bitmap[page_idx >> 6] &= ~(1ULL << (page_idx & 63));
 }
 
 static uint8_t bitmap_test(uint64_t page_idx) {
-    return avmf_bitmap[page_idx / 8] & (1 << (page_idx % 8));
+    return (avmf_bitmap[page_idx >> 6] >> (page_idx & 63)) & 1;
 }
 
 uint64_t avmf_virt_to_phys(uint64_t virt) {
@@ -73,29 +76,49 @@ uint64_t avmf_alloc_phys_contiguous(uint64_t size) {
     uint64_t sz = align4k(size);
     uint64_t pages_needed = sz / PAGE_SIZE;
 
+    if (pages_needed == 0) {
+        spin_unlock_irqrestore(&avmf_lock, rflags);
+        return 0;
+    }
+
     for (int i = 0; i < 128; i++) {
-        if (avmf_limit[i] == 0) continue;
+        if (avmf_limit[i] <= avmf_base[i])
+            continue;
 
-        uint64_t start_page = avmf_base[i] / PAGE_SIZE;
-        uint64_t end_page = avmf_limit[i] / PAGE_SIZE;
-        uint64_t consecutive = 0;
-        uint64_t first_page = 0;
+        uint64_t start_page = align4k(avmf_base[i]) >> PAGE_SHIFT;
+        uint64_t end_page = avmf_limit[i] >> PAGE_SHIFT;
 
-        for (uint64_t p = start_page; p < end_page; p++) {
+        if (end_page <= start_page)
+            continue;
+
+        uint64_t p = (last_alloc_page >= start_page && last_alloc_page < end_page) ? last_alloc_page : start_page;
+
+        uint64_t run_start = 0;
+        uint64_t run_len = 0;
+
+        while (p < end_page) {
             if (!bitmap_test(p)) {
-                if (consecutive == 0) first_page = p;
-                consecutive++;
-
-                if (consecutive == pages_needed) {
-                    for (uint64_t j = first_page; j < first_page + pages_needed; j++) {
-                        bitmap_set(j);
+                if (run_len == 0)
+                    run_start = p;
+                run_len++;
+                if (run_len >= pages_needed) {
+                    for (uint64_t j = 0;
+                         j < pages_needed;
+                         j++) {
+                        bitmap_set(run_start + j);
                     }
-                    spin_unlock_irqrestore(&avmf_lock, rflags);
-                    return first_page * PAGE_SIZE;
+                    last_alloc_page = run_start + pages_needed;
+                    uint64_t phys = run_start << PAGE_SHIFT;
+                    spin_unlock_irqrestore(
+                        &avmf_lock,
+                        rflags
+                    );
+                    return phys;
                 }
             } else {
-                consecutive = 0;
+                run_len = 0;
             }
+            p++;
         }
     }
 
@@ -194,6 +217,11 @@ void avmf_init(uint64_t* base_phys, uint64_t* limit_phys, uint8_t entries) {
         avmf_limit[i] = limit_phys[i];
     }
     avmf_head = (avmf_header_t*)NULL;
+
+    for (int i =0; i < 200; i++) {
+        avmf_bitmap[i] = 0;
+    }
+
     spin_unlock_irqrestore(&avmf_lock, rflags);
 }
 

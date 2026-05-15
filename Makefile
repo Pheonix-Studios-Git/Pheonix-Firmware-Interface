@@ -35,6 +35,7 @@ endif
 CC = $(CROSS)gcc
 LD = $(CROSS)ld
 OBJCOPY = $(CROSS)objcopy
+NASM = nasm
 
 CFLAGS += -ffreestanding \
 		  -fno-exceptions -fno-unwind-tables \
@@ -51,12 +52,17 @@ LDFLAGS = -nostdlib -T $(SCRIPTS_DIR)/linker.$(ARCH).ld \
           --nmagic \
 		  -N
 
+NASM_FLAGS = -f elf64
+
 # Sources
 SRCS := $(shell find $(SRC_DIR) -name "*.c")
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 
 SRCS_ASM := $(shell find $(SRC_DIR) -name "*.S")
 OBJS_ASM := $(patsubst $(SRC_DIR)/%.S,$(BUILD_DIR)/%.S.o,$(SRCS_ASM))
+
+SRCS_NASM := $(shell find $(SRC_DIR) -name "*.asm")
+OBJS_NASM := $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.asm.o,$(SRCS_NASM))
 
 DEPS := $(OBJS:.o=.d)
 -include $(DEPS)
@@ -111,9 +117,15 @@ $(BUILD_DIR)/%.S.o: $(SRC_DIR)/%.S
 	@$(CC) $(CFLAGS) -c $< -o $@
 	$(call success,"Assembled S [Assembly]: $@")
 
-$(TARGET_ELF): $(OBJS) $(OBJS_ASM)
+$(BUILD_DIR)/%.asm.o: $(SRC_DIR)/%.asm
+	@mkdir -p $(dir $@)
+	$(call log,"Assembling ASM [Assembly]: $<")
+	@$(NASM) $(NASM_FLAGS) $< -o $@
+	$(call success,"Assembled ASM [Assembly]: $@")
+
+$(TARGET_ELF): $(OBJS) $(OBJS_ASM) $(OBJS_NASM)
 	$(call log,"Linking $(OBJS_ASM) $(OBJS)")
-	@$(LD) $(LDFLAGS) -o $(TARGET_ELF) $(OBJS_ASM) $(OBJS)
+	@$(LD) $(LDFLAGS) -o $(TARGET_ELF) $(OBJS_ASM) $(OBJS_NASM) $(OBJS)
 	$(call success,"Linked $(TARGET_ELF)")
 
 $(TARGET): $(TARGET_ELF)

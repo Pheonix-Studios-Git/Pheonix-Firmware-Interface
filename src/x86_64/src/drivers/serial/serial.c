@@ -6,13 +6,16 @@
 
 #define SERIAL_PORT 0x3F8
 
-static spinlock_t tmp_lock = 0;
 static spinlock_t serial_lock = 0;
 static spinlock_t serialp_lock = 0;
 static spinlock_t serialf_lock = 0;
 static spinlock_t serialc_lock = 0;
 
-void serial_init(void) {
+void serial_init(void) { // ONLY FOR BSP CORE!
+    serial_lock = 0;
+    serialp_lock = 0;
+    serialf_lock = 0;
+    serialc_lock = 0;
     uint64_t rflags = spin_lock_irqsave(&serial_lock);
 
     outb(SERIAL_PORT + 1, 0x00); // Disable interrupts

@@ -15,7 +15,7 @@ static void add_region(uint64_t base, uint64_t len, uint64_t type, uint64_t ext)
 }
 
 void init_basic_e820(void) {
-    uint64_t RAM_END = 0x80000000; // Minimum RAM Needed for function - 2GB
+    uint64_t RAM_END = 0x10000000; // Minimum RAM Needed for function - 256MB
 
     add_region(0x00000000, 0x00300000, E820_TYPE_RESERVED, 0); // Firmware Stack + VGA + Data
     add_region(0x00300000, RAM_END - 0x00300000, E820_TYPE_RAM, 0); // Usable

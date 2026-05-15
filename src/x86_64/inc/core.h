@@ -1,7 +1,7 @@
 #pragma once
 
-#include <builtins.h>
 #include <stdint.h>
+#include <stddef.h>
 
 void outb(uint16_t port, uint8_t value) __attribute__((used));
 void outw(uint16_t port, uint16_t value) __attribute__((used));
@@ -20,3 +20,11 @@ unsigned long long spin_lock_irqsave(spinlock_t* lock) __attribute__((used));
 void spin_unlock_irqrestore(spinlock_t* lock, unsigned long long flags) __attribute__((used));
 
 unsigned int str_to_uint(const char* str) __attribute__((used));
+
+void ftimer_calibrate(void) __attribute__((used));
+void fdelay(uint32_t ms) __attribute__((used));
+void* fmalloc(size_t size) __attribute__((used));
+void flink(void* ptr1, void* ptr2) __attribute__((used));
+void ffree(void* ptr) __attribute__((used));
+void* fcalloc(size_t nmemb, size_t size) __attribute__((used));
+void* frealloc(void* ptr, size_t new_size) __attribute__((used));

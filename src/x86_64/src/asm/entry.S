@@ -64,36 +64,52 @@ init_pm:
     orl $(1 << 8), %eax
     wrmsr
 
+    // Load 64-bit GDT and Jump
+    lgdt (gdt64_descriptor)
+
     // Enable Paging & Long Mode
     movl %cr0, %eax
     orl $(1 << 31), %eax
     movl %eax, %cr0
-
-    // Load 64-bit GDT and Jump
-    lgdt (gdt64_descriptor)
 
     .byte 0xEA
     .long init_pm64
     .word 0x08 // jmp 0x08:init_pm64
 
 clear_page_tables:
-    // Zero out PML4, PDPT, and PD0
+    // Zero out everything
     movl $pml4, %edi
-    movl $4096, %ecx // (4096 * 4) / 4
+    movl $4096*6/4, %ecx
     xorl %eax, %eax
     rep stosl
-    ret
 
 setup_paging_structures:
     // PML4[0] -> PDPT
     movl $pdpt, %eax
     orl $(PAGE_PRESENT | PAGE_RW), %eax
-    movl %eax, (pml4)
+    movl %eax, pml4
+    movl $0, pml4+4
 
     // Identity Map 0-1GB (PDPT[0] -> PD0)
     movl $pd0, %eax
     orl $(PAGE_PRESENT | PAGE_RW), %eax
-    movl %eax, (pdpt)
+    movl %eax, pdpt + (0 * 8)
+    movl $0, pdpt + (0 * 8 + 4)
+
+    movl $pd1, %eax
+    orl $(PAGE_PRESENT | PAGE_RW), %eax
+    movl %eax, pdpt + (1 * 8)
+    movl $0, pdpt + (1 * 8 + 4)
+
+    movl $pd2, %eax
+    orl $(PAGE_PRESENT | PAGE_RW), %eax
+    movl %eax, pdpt + (2 * 8)
+    movl $0, pdpt + (2 * 8 + 4)
+
+    movl $pd3, %eax
+    orl $(PAGE_PRESENT | PAGE_RW), %eax
+    movl %eax, pdpt + (3 * 8)
+    movl $0, pdpt + (3 * 8 + 4)
 
     movl $pd0, %edi
     movl $0, %ebx
@@ -108,13 +124,8 @@ setup_paging_structures:
     decl %ecx
     jnz .fill_pd0
 
-    // Identity Map 3GB-4GB (PDPT[3] -> PD1) for Reset Vector or PFI Entry
-    movl $pd1, %eax
-    orl $(PAGE_PRESENT | PAGE_RW), %eax
-    movl %eax, pdpt + (3 * 8)
-
     movl $pd1, %edi
-    movl $0xC0000000, %ebx
+    movl $0x40000000, %ebx
     movl $512, %ecx
 .fill_pd1:
     movl %ebx, %eax
@@ -125,6 +136,32 @@ setup_paging_structures:
     addl $0x200000, %ebx
     decl %ecx
     jnz .fill_pd1
+
+    movl $pd2, %edi
+    movl $0x80000000, %ebx
+    movl $512, %ecx
+.fill_pd2:
+    movl %ebx, %eax
+    orl $(PAGE_PRESENT | PAGE_RW | PAGE_PS), %eax
+    movl %eax, (%edi)
+    movl $0, 4(%edi)
+    addl $8, %edi
+    addl $0x200000, %ebx
+    decl %ecx
+    jnz .fill_pd2
+
+    movl $pd3, %edi
+    movl $0xC0000000, %ebx
+    movl $512, %ecx
+.fill_pd3:
+    movl %ebx, %eax
+    orl $(PAGE_PRESENT | PAGE_RW | PAGE_PS), %eax
+    movl %eax, (%edi)
+    movl $0, 4(%edi)
+    addl $8, %edi
+    addl $0x200000, %ebx
+    decl %ecx
+    jnz .fill_pd3
     ret
 
 .code64
@@ -171,3 +208,5 @@ pml4: .skip 4096
 pdpt: .skip 4096
 pd0: .skip 4096
 pd1: .skip 4096
+pd2: .skip 4096
+pd3: .skip 4096

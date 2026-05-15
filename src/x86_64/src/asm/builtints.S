@@ -4,6 +4,7 @@
     .global memcpy
     .global memcmp
     .global memmove
+    .global memset
 
     .global strlen
     .global strcmp
@@ -16,25 +17,25 @@ memcpy: // void memcpy(void* d, void* src, size_t n);
 
     ret
 
-memcmp: // int memcmp(void* a, void* b)
+memcmp: // int memcmp(void* a, void* b, size_t n)
     test %rdx, %rdx
     je .memcmp_eq
     .memcmp_loop:
         movzbl (%rdi), %eax
-        movzbl (%rsi), %edx
-        cmp %edx, %eax
+        movzbl (%rsi), %ecx
+
+        cmp %ecx, %eax
         jne .memcmp_diff
+
         inc %rdi
         inc %rsi
         dec %rdx
         jnz .memcmp_loop
     .memcmp_eq:
         xor %eax, %eax
-
         ret
     .memcmp_diff:
-        sub %edx, %eax
-
+        sub %ecx, %eax
         ret
 
 memmove: // void memmove(void* dst, void* src)
@@ -54,6 +55,36 @@ memmove: // void memmove(void* dst, void* src)
 
         ret
 
+memset: // void* memset(void* dst, int c, size_t n)
+    mov %rdi, %rax
+    test %rdx, %rdx
+    je .memset_done
+
+    movzbq %sil, %rcx
+    
+    mov %rcx, %rax
+    shl $8,  %rcx
+    or  %rax, %rcx
+
+    mov %rcx, %rax
+    shl $16, %rcx
+    or  %rax, %rcx
+
+    mov %rcx, %rax
+    shl $32, %rcx
+    or  %rax, %rcx
+
+    mov %rdx, %r8
+    shr $3, %rdx
+    cld
+    rep stosq
+
+    mov %r8, %rdx 
+    and $7, %rdx 
+    mov %cl, %al
+    rep stosb
+    .memset_done:
+        ret
 
 strlen: // size_t strlen(char* a)
     xor %rax, %rax

@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #define PAGE_SIZE 4096
+#define PAGE_SHIFT 12
 #define PAGE_PRESENT 0x1 // Page Present
 #define PAGE_RW 0x2 // Read/Write
 #define PAGE_USER 0x4 // User-mode accessable

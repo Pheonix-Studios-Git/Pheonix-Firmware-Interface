@@ -96,11 +96,6 @@ void pager_init(void) {
         if (e->type == E820_TYPE_RAM) {
             serial_printf("E820: %p - %p (%llu MB) (Type RAM)\n", e->base, end_addr, e->len / 1024 / 1024);
             uint64_t start = e->base;
-            // Don't use the first 64MB!
-            if (start < 0x100000 * 64) {
-                if (e->len <= (0x200000 - start)) continue; // Too small
-                start = 0x200000;
-            }
             base_phys[phys_idx] = start;
             limit_phys[phys_idx] = end_addr;
             if (end_addr > max_phys_addr)
