@@ -43,6 +43,8 @@ show_help() {
     Other:
         -er, --enable-reboot           Allow rebooting
         -h, --help                     Show this help message
+        -ser=<out>, --serial=<out>     Redirect Serial Output to either 'file:/path/to/file' or 'stdio'
+        -fout=<file>, --file-out        Redirect all output to a file
 
     Examples:
     ./run.sh --high-end --cpu=amd --ram=2G --gpu=virtio --web
@@ -62,6 +64,8 @@ nographics=0
 internet=0
 enable_reboot=0
 arch="x86_64"
+serial="stdio"
+file_out="none"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -79,6 +83,8 @@ while [[ $# -gt 0 ]]; do
         --nographics|-nog) nographics=1 ;;
         --internet|-web) internet=1 ;;
         --enable-reboot|-er) enable_reboot=1 ;;
+        --serial=*|-ser=*) serial="${1#*=}" ;;
+        --file-out=*|-fout=*) file_out="${1#*=}" ;;
         --help|-h)
             show_help
             exit 0
@@ -213,6 +219,17 @@ get_extra_options() {
     fi
 }
 
+get_file_options() {
+    case "$file_out" in
+        none)
+            echo ""
+            ;;
+        *)
+            echo "> $file_out 2>&1"
+            ;;
+    esac
+}
+
 CPU_OPTS="-cpu $(get_cpu)"
 SMP_OPTS="$(get_smp)"
 GPU_OPTS="$(get_gpu)"
@@ -222,11 +239,13 @@ NET_OPTS="$(get_network)"
 DISPLAY_OPTS="$(get_display)"
 LOG_OPTS="-d $logs"
 EXTRA_OPTS="$(get_extra_options)"
+SERIAL_OPTS="-serial $serial"
+FILE_OPTS="$(get_file_options)"
 
 case "$mode" in
     2) # KVM
-        $QEMU \
-            -m "$ram" \
+        eval "$QEMU \
+            -m $ram \
             -M q35,accel=kvm \
             $CPU_OPTS \
             $SMP_OPTS \
@@ -236,15 +255,15 @@ case "$mode" in
             $MOUSE_OPTS \
             $NET_OPTS \
             $DISPLAY_OPTS \
-            -serial stdio \
+            $SERIAL_OPTS \
             $LOG_OPTS \
-            -no-shutdown \
-            -bios $FIRMWARE
-        ;;
+            $EXTRA_OPTS \
+            -bios $FIRMWARE $FILE_OPTS"
+        ;; 
 
     1) # High-End (non-KVM)
-        $QEMU \
-            -m "$ram" \
+        eval "$QEMU \
+            -m $ram \
             -M q35 \
             $CPU_OPTS \
             $SMP_OPTS \
@@ -253,24 +272,24 @@ case "$mode" in
             $MOUSE_OPTS \
             $NET_OPTS \
             $DISPLAY_OPTS \
-            -serial stdio \
+            $SERIAL_OPTS \
             $LOG_OPTS \
             $EXTRA_OPTS \
-            -bios $FIRMWARE
+            -bios $FIRMWARE $FILE_OPTS"
         ;;
 
     0) # Low-End
-        $QEMU \
-            -m "$ram" \
+        eval "$QEMU \
+            -m $ram \
             $GPU_OPTS \
             $KBD_OPTS \
             $MOUSE_OPTS \
             $NET_OPTS \
             $DISPLAY_OPTS \
-            -serial stdio \
+            $SERIAL_OPTS \
             $LOG_OPTS \
-            -no-shutdown -no-reboot \
-            -bios $FIRMWARE
+            $EXTRA_OPTS \
+            -bios $FIRMWARE $FILE_OPTS"
         ;;
 
     *)

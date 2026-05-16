@@ -1,0 +1,284 @@
+[BITS 16]
+
+%define pfi_main 0xFF000000
+
+section .text.entry
+
+early_init:
+    ; Set stack in real mode first
+    mov ax, 0x0000
+    mov ss, ax
+    mov sp, 0x7C00 ; safe low real-mode stack
+
+    ; Enable A20
+    call enable_a20
+
+    ; Load gdt_descriptor
+    mov al, 0xFF
+    out 0xA1, al ; mask slave PIC
+    out 0x21, al ; mask master PIC
+    cli
+
+    xor ax, ax
+    mov ds, ax
+
+    mov eax, ds
+    shl eax, 4
+    add eax, gdt_start ; Get physical address of the table
+    mov [gdt_descriptor + 2], eax ; Patch the linear address field in the descriptor
+    lgdt [gdt_descriptor]
+    
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+    jmp dword CODE_SEG:init_pm
+
+[BITS 32]
+init_pm: 
+    ; set segment registers and stack for protected mode
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+    mov esp, 0x9000
+
+    ; Clear out the uninitialized memory in the page tables
+    mov edi, pml4
+    mov ecx, 4096/4
+    xor eax, eax
+    rep stosd
+    mov edi, pdpt
+    mov ecx, 4096/4
+    rep stosd
+    mov edi, pd0
+    mov ecx, 4096/4
+    rep stosd
+
+    ; ensure paging is off
+    mov eax, cr0
+    and eax, ~(1 << 31)
+    mov cr0, eax
+
+    ; Enable PAE
+    mov eax, cr4
+    or eax, (1 << 5)
+    mov cr4, eax
+
+    ; readback CR4 to debug
+    mov eax, cr4
+    mov [cr4_rb], eax
+
+    lea eax, [pdpt] ; runtime linear address of pdpt (linear==physical now)
+    or eax, 3 ; Present | RW
+    mov dword [pml4], eax
+    mov dword [pml4 + 4], 0 ; high dword = 0
+
+    ; Build PDPT[0] -> PD0
+    lea eax, [pd0]
+    or eax, 3
+    mov dword [pdpt], eax
+    mov dword [pdpt + 4], 0
+
+    ; Fill PD0 with 2 MiB identity mappings (PD entries)
+    ; PD entry format (64-bit): base (bits 51:12) | flags (low bits)
+    ; For 2 MiB pages we use flag 0x83 : Present (1) | RW (2) | PS (0x80)
+    mov edi, pd0 ; edi -> PD0 base
+    xor ebx, ebx ; ebx = physical base (0, 2MB, 4MB, ...)
+    mov ecx, 512 ; 512 entries * 2MiB = 1GiB
+.fill_pd_loop:
+    mov eax, ebx
+    or eax, 0x83 ; set Present|RW|PS
+    mov [edi], eax ; low 32 bits
+    add edi, 4
+    mov dword [edi], 0 ; high 32 bits = 0 (map <4GB)
+    add edi, 4
+    add ebx, 0x200000 ; next 2MiB
+    loop .fill_pd_loop
+
+    ; Load CR3 with physical address of PML4
+    lea eax, [pml4]
+    mov cr3, eax
+
+    ; readback CR3 into debug var
+    mov eax, cr3
+    mov [cr3_rb+4], eax
+
+    ; Enable LME (EFER)
+    mov ecx, 0xC0000080
+    rdmsr
+    or eax, (1 << 8) | (1 << 11) ; set LME and NXE
+    wrmsr
+
+    ; Load 64-bit GDT runtime
+    lgdt [gdt64_descriptor]
+
+    ; Enable paging
+    mov eax, cr0
+    or eax, (1 << 31)
+    mov cr0, eax
+
+    jmp CODE_SEG64:init_pm64
+
+[BITS 64]
+init_pm64:
+    ; set up segments
+    mov ax, DATA_SEG64
+    mov fs, ax
+    mov gs, ax
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov rsp, 0x08000000 ; 128MB
+    and rsp, -16
+    mov rbp, rsp
+
+    mov rax, ap_tss
+    mov rcx, gdt64 + 24
+
+    mov [rax + 4], rsp ; RSP0
+
+    mov word [rcx + 2], ax
+    shr rax, 16
+    mov byte [rcx + 4], al
+    shr rax, 8
+    mov byte [rcx + 7], al
+    shr rax, 8
+    mov dword [rcx + 8], eax
+
+    mov dword [rcx + 12], 0
+
+    mov ax, 0x18
+    ltr ax
+
+    xor rax, rax
+    xor rcx, rcx
+    xor rdx, rdx
+    xor rbx, rbx
+    xor rsi, rsi
+    xor rdi, rdi
+    xor r8, r8
+    xor r9, r9
+    xor r10, r10
+    xor r11, r11
+    xor r12, r12
+    xor r13, r13
+    xor r14, r14
+    xor r15, r15
+
+    mov rsp, 0x08000000 ; 128MB
+    and rsp, -16
+    mov rbp, rsp
+
+    mov rax, pfi_main
+    jmp rax
+
+hang:
+    hlt
+    jmp hang
+
+enable_a20:
+.wait_input:
+    in   al, 0x64 ; read status
+    test al, 2
+    jnz  .wait_input ; wait until input buffer empty
+    mov  al, 0xD1
+    out  0x64, al
+.wait_input2:
+    in   al, 0x64
+    test al, 2
+    jnz  .wait_input2
+    mov  al, 0xDF ; set A20 bit
+    out  0x60, al
+    ret
+
+setup_paging:
+    ret
+
+section .reset
+[BITS 16]
+global _start
+_start:
+    db 0x66
+    db 0xEA
+    dd early_init
+    dw 0x00
+
+    align 4
+    times (16 - ($ - $$)) db 0
+
+ALIGN 16
+gdt_start:
+    dq 0x0000000000000000 ; NULL
+    dq 0x00CF9A000000FFFF ; CODE_SEG
+    dq 0x00CF92000000FFFF ; DATA_SEG
+gdt_end:
+
+gdt_descriptor:
+    dw gdt_end - gdt_start - 1
+    dd gdt_start
+
+gdt64:
+    dq 0x0000000000000000 ; NULL
+    dq 0x00AF9A000000FFFF ; 64-bit CODE (0x08)
+    dq 0x00AF92000000FFFF ; 64-bit DATA (0x10)
+    dq 0x0000890000006700 ; TSS Entry 1
+    dq 0x0000000000000000 ; TSS Entry 2
+gdt64_descriptor:
+    dw gdt64_end - gdt64 - 1
+    dq gdt64
+gdt64_end:
+
+gdtr_temp:
+    dw 0
+    dd 0
+
+ALIGN 16
+ap_tss:
+    dd 0 ; Reserved
+    dq 0 ; RSP0 (will be patched during runtime)
+    dq 0 ; RSP1
+    dq 0 ; RSP2
+    dq 0 ; Reserved
+    dq 0 ; IST1
+    dq 0 ; IST2
+    dq 0 ; IST3
+    dq 0 ; IST4
+    dq 0 ; IST5
+    dq 0 ; IST6
+    dq 0 ; IST7
+    dq 0 ; Reserved
+    dd 0 ; Reserved
+    dw 0 ; IO Map Base
+ap_tss_end:
+
+ALIGN 16
+tss64_desc:
+    dq ap_tss_end - ap_tss - 1
+    dq 0 ; To be patched at runtime
+
+CODE_SEG equ 0x08
+DATA_SEG equ 0x10
+CODE_SEG64 equ 0x08
+DATA_SEG64 equ 0x10
+
+; Data and debug
+ALIGN 16
+farptr64: times 6 db 0
+
+cr4_rb: dd 0
+cr3_rb: dd 0
+efer_rb_lo: dd 0
+efer_rb_hi: dd 0
+
+magic_pm: dd 0
+magic_pm64: dd 0
+
+section .pagetables nobits
+    ALIGN 4096
+    pml4: resb 4096 ; reserve full page for clarity
+    ALIGN 4096
+    pdpt: resb 4096
+    ALIGN 4096
+    pd0: resb 4096

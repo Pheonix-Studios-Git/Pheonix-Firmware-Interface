@@ -4,6 +4,11 @@ ENTRY(_start)
 
 SECTIONS
 {
+    .boot_header : {
+        KEEP(*(.boot_header))
+        . = 0x1000; /* reserve 4 blocks */
+    }
+
     .data 0x100000 : AT(SIZEOF(.text)) {
         _data_start = .;
         *(.data*)

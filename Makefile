@@ -2,6 +2,7 @@
 
 # Basic Config
 ARCH ?= x86_64
+VERBOSE ?= 0
 BUILD_DIR = build/$(ARCH)
 BIN_DIR = bin/$(ARCH)
 SRC_DIR = src/$(ARCH)/src
@@ -53,6 +54,7 @@ LDFLAGS = -nostdlib -T $(SCRIPTS_DIR)/linker.$(ARCH).ld \
 		  -N
 
 NASM_FLAGS = -f elf64
+ENTRY_NASM_FLAGS = -f bin
 
 # Sources
 SRCS := $(shell find $(SRC_DIR) -name "*.c")
@@ -61,10 +63,13 @@ OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 SRCS_ASM := $(shell find $(SRC_DIR) -name "*.S")
 OBJS_ASM := $(patsubst $(SRC_DIR)/%.S,$(BUILD_DIR)/%.S.o,$(SRCS_ASM))
 
-SRCS_NASM := $(shell find $(SRC_DIR) -name "*.asm")
+ENTRY_SRCS_NASM := $(shell find $(SRC_DIR) -name "entry.asm" -print -quit)
+ENTRY_OBJS_NASM := $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.bin,$(ENTRY_SRCS_NASM))
+
+SRCS_NASM := $(filter-out $(ENTRY_SRCS_NASM),$(shell find $(SRC_DIR) -name "*.asm"))
 OBJS_NASM := $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.asm.o,$(SRCS_NASM))
 
-DEPS := $(OBJS:.o=.d)
+DEPS := $(OBJS:.o=.d) $(OBJS_ASM:.S.o=.S.d) $(OBJS_NASM:.asm.o=.asm.d) $(ENTRY_OBJS_NASM:.bin=.bin.d)
 -include $(DEPS)
 
 # Colors
@@ -76,82 +81,149 @@ COLOR_BLUE := \033[34m
 COLOR_CYAN := \033[36m
 
 define log
-	@echo -e "$(COLOR_CYAN)[PFI]$(COLOR_RESET) $(1)"
+	echo -e "$(COLOR_CYAN)[PFI]$(COLOR_RESET) $(1)"
 endef
 
 define success
-	@echo -e "$(COLOR_GREEN)[OK]$(COLOR_RESET) $(1)"
+	echo -e "$(COLOR_GREEN)[OK]$(COLOR_RESET) $(1)"
 endef
 
 define error
-	@echo -e "$(COLOR_RED)[ERROR]$(COLOR_RESET) $(1)"
+	echo -e "$(COLOR_RED)[ERROR]$(COLOR_RESET) $(1)"
 endef
 
 define warn
-	@echo -e "$(COLOR_YELLOW)[WARN]$(COLOR_RESET) $(1)"
+	echo -e "$(COLOR_YELLOW)[WARN]$(COLOR_RESET) $(1)"
 endef
 
 # Rules
 all: $(BIN_DIR) $(BUILD_DIR) $(TARGET)
-	$(call success,"Build complete for $(ARCH) at $(TARGET)")
+	@$(call success,"Build complete for $(ARCH) at $(TARGET)")
 
 $(BUILD_DIR):
-	$(call log,"Creating build directory")
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call log,"Creating build directory"); \
+	fi
 	@mkdir -p $(BUILD_DIR)
-	$(call success,"Created build directory")
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call success,"Created build directory"); \
+	fi
 
 $(BIN_DIR):
-	$(call log,"Creating bin directory")
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call log,"Creating bin directory"); \
+	fi
 	@mkdir -p $(BIN_DIR)
-	$(call success,"Created bin directory")
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call success,"Created bin directory"); \
+	fi
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(call log,"Compiling C: $<")
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call log,"Compiling C: $<"); \
+	else \
+		$(call log,"Compiling C file...."); \
+	fi
+
 	@$(CC) $(CFLAGS) -c $< -o $@
-	$(call success,"Compiled C: $@")
+
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call success,"Compiled C: $@"); \
+	else \
+		$(call success,"Compiled C file"); \
+	fi
 
 $(BUILD_DIR)/%.S.o: $(SRC_DIR)/%.S
 	@mkdir -p $(dir $@)
-	$(call log,"Assembling S [Assembly]: $<")
+	
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call log,"Assembling GAS Assembly: $<"); \
+	else \
+		$(call log,"Assembling GAS Assembly file..."); \
+	fi
+
 	@$(CC) $(CFLAGS) -c $< -o $@
-	$(call success,"Assembled S [Assembly]: $@")
+	
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call success,"Assembled GAS Assembly: $@"); \
+	else \
+		$(call success,"Assembled GAS Assembly file"); \
+	fi
 
 $(BUILD_DIR)/%.asm.o: $(SRC_DIR)/%.asm
 	@mkdir -p $(dir $@)
-	$(call log,"Assembling ASM [Assembly]: $<")
+
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call log,"Assembling NASM Assembly: $<"); \
+	else \
+		$(call log,"Assembling NASM Assembly file..."); \
+	fi
+
 	@$(NASM) $(NASM_FLAGS) $< -o $@
-	$(call success,"Assembled ASM [Assembly]: $@")
+
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call success,"Assembled NASM Assembly: $@"); \
+	else \
+		$(call success,"Assembled NASM Assembly file"); \
+	fi
+	
+
+$(ENTRY_OBJS_NASM): $(ENTRY_SRCS_NASM)
+	@mkdir -p $(dir $@)
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call log,"Assembling Entry NASM Assembly: $<"); \
+	else \
+		$(call log,"Assembling Entry NASM Assembly file..."); \
+	fi
+
+	@$(NASM) $(ENTRY_NASM_FLAGS) $(ENTRY_SRCS_NASM) -o $@
+
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call success,"Assembled Entry NASM Assembly: $@"); \
+	else \
+		$(call success,"Assembled Entry NASM Assembly file"); \
+	fi
 
 $(TARGET_ELF): $(OBJS) $(OBJS_ASM) $(OBJS_NASM)
-	$(call log,"Linking $(OBJS_ASM) $(OBJS)")
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call log,"Linking $(OBJS_ASM) $(OBJS) $(OBJS_NASM)"); \
+	else \
+		$(call log,"Linking target..."); \
+	fi
 	@$(LD) $(LDFLAGS) -o $(TARGET_ELF) $(OBJS_ASM) $(OBJS_NASM) $(OBJS)
-	$(call success,"Linked $(TARGET_ELF)")
+	
+	@if [ "$(VERBOSE)" = "1" ]; then \
+		$(call success,"Linked $(TARGET_ELF)"); \
+	else \
+		$(call success,"Linked target"); \
+	fi
 
-$(TARGET): $(TARGET_ELF)
-	$(call log,"Creating Flash image $(TARGET)")
+$(TARGET): $(TARGET_ELF) $(ENTRY_OBJS_NASM)
+	@$(call log,"Creating Flash image $(TARGET)")
 	@$(OBJCOPY) -O binary \
 		--strip-all \
-		-j .text -j .reset \
+		-j .text -j .reset -j .data \
 		--gap-fill 0xFF \
 		--pad-to 0x1000000 \
 		$(TARGET_ELF) $(TARGET)
+	@dd if=$(ENTRY_OBJS_NASM) of=$(TARGET) seek=0 conv=notrunc bs=1 count=4096
 	@SIZE=$$(stat -c%s $(TARGET)); \
 	if [ "$$SIZE" -ne 16777216 ]; then \
 		printf "$(COLOR_RED)[Error]$(COLOR_RESET) File size is %s, expected 16777216\n" "$$SIZE" >&2; \
 		exit 1; \
 	fi
-	$(call success,"Flash image $(TARGET) created and aligned.")
+	@$(call success,"Flash image $(TARGET) created and aligned.")
 
 clean:
-	$(call log,"Removing $(BUILD_DIR) and $(BIN_DIR)")
+	@$(call log,"Removing $(BUILD_DIR) and $(BIN_DIR)")
 	@rm -rf $(BUILD_DIR) $(BIN_DIR)
-	$(call success,"Removed $(BUILD_DIR) and $(BIN_DIR)")
+	@$(call success,"Removed $(BUILD_DIR) and $(BIN_DIR)")
 
 # Convenience is good boys
 run:
-	$(call log,"Running - $(ARCH)")
+	@$(call log,"Running - $(ARCH)")
 	@./run.sh -arch=$(ARCH)
-	$(call success,"Finished")
+	@$(call success,"Finished")
 
 .PHONY: all clean run
